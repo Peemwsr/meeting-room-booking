@@ -419,6 +419,11 @@ dialog>form,dialog>div.dlg-wrap{display:flex;flex-direction:column;min-height:0;
 .codebox input{flex:1;min-width:220px;font-size:13px}
 code.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--accent-soft);color:var(--accent-ink);border-radius:8px;padding:2px 8px;word-break:break-all}
 .hp{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
-.ev.slot{cursor:default;opacity:.92;background:var(--off-soft);border-left-color:var(--line);color:var(--ink-2)}
-.ev.slot b{color:var(--ink-2)}
-.mchip.slot{cursor:default;background:var(--off-soft);border-left-color:var(--line);color:var(--ink-2)}
+
+/* ===== room manager under the card; calendar blocks with details ===== */
+.room-mgr{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line-soft);font-size:13.5px;color:var(--ink-2)}
+.room-mgr .ic{width:16px;height:16px;flex:none}
+.room-mgr span{display:inline-flex;align-items:center;gap:6px}
+.room-mgr a{color:var(--accent-ink);font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.ev .me{margin-right:4px;margin-left:0}
+.kv a{color:var(--accent-ink);text-decoration:underline;text-underline-offset:3px}

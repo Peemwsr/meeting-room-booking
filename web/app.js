@@ -55,6 +55,7 @@ const ICONS = {
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   cal: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
 };
@@ -92,7 +93,8 @@ function mapRoom(d) {
     id: d.id, name: str(d.name, 80) || 'ห้องไม่มีชื่อ', location: str(d.location, 120), capacity: cap > 0 ? cap : 0,
     equipment: Array.isArray(d.equipment) ? d.equipment.filter(x => typeof x === 'string').slice(0, 40) : [],
     description: str(d.description, 500), status: d.status === 'closed' ? 'closed' : 'open', order: Number(d.sort_order) || 0,
-    createdAt: Date.parse(d.created_at) || 0, photo: str(d.photo_path, 200)
+    createdAt: Date.parse(d.created_at) || 0, photo: str(d.photo_path, 200),
+    manager: str(d.manager_name, 80), managerPhone: str(d.manager_phone, 40)
   };
 }
 function mapEvent(e) {
@@ -111,11 +113,19 @@ function mapBooking(d, log) {
   };
 }
 const isMine = b => !!b.mine;
+/* tel: link dials only the main number (text after "ต่อ" / ext / # is an extension) */
+const telHref = p => 'tel:' + String(p).split(/ต่อ|ext|#|,/i)[0].replace(/[^0-9+]/g, '');
+const telLink = p => '<a href="' + esc(telHref(p)) + '">' + esc(p) + '</a>';
+function bookTip(b) {
+  const r = roomOf(b.roomId), ct = S.contacts.get(bkey(b));
+  return [b.title, b.start + ' ถึง ' + b.end + ' น.' + (r ? ' · ' + r.name : ''), b.bookerName ? 'ผู้ขอ: ' + b.bookerName + (b.agency ? ' (' + b.agency + ')' : '') : '', ct && ct.phone ? 'โทร ' + ct.phone : ''].filter(Boolean).join('\n');
+}
 const BASE_B = { ownerUid: '', mine: false, slot: false, code: '', contact: '', cancelledAt: 0, cancelReason: '', log: [], prevSched: null, prepared: false, attendees: 0, needs: [], note: '', agency: '', mode: '', bookerName: '' };
 /* an hour somebody else has taken: public visitors see only that it is busy */
 function mapSlot(r) {
   const s = Number(r.start_min), e = Number(r.end_min), date = String(r.day).slice(0, 10);
-  return Object.assign({}, BASE_B, { id: 'slot:' + r.room_id + date + s, slot: true, roomId: r.room_id, date, start: minToStr(s), end: minToStr(e), s, e, title: 'ไม่ว่าง', status: 'active', createdAt: 0, schedAt: 0, cancelledBy: '' });
+  return Object.assign({}, BASE_B, { id: 'slot:' + r.room_id + date + s, slot: true, roomId: r.room_id, date, start: minToStr(s), end: minToStr(e), s, e,
+    title: str(r.title, 120) || 'ไม่ว่าง', bookerName: str(r.booker_name, 80), agency: str(r.agency, 100), status: 'active', createdAt: 0, schedAt: 0, cancelledBy: '', _phone: str(r.phone, 40) });
 }
 /* a booking found by its code (the person's own) */
 function mapMine(j) {
@@ -198,7 +208,7 @@ async function loadOnce() {
       must(SB.from('booking_events').select('*').gte('created_at', new Date(Date.now() - 31 * 864e5).toISOString()).order('created_at').limit(5000)),
       must(SB.from('profiles').select('*').order('created_at').limit(2000)), rpc('get_mail_settings'));
   } else {
-    jobs.push(must(SB.from('public_slots').select('room_id,day,start_min,end_min').gte('day', from).limit(5000)), codes.length ? rpc('get_bookings_by_codes', { p_codes: codes }) : Promise.resolve([]));
+    jobs.push(must(SB.from('public_slots').select('room_id,day,start_min,end_min,title,booker_name,agency,phone').gte('day', from).limit(5000)), codes.length ? rpc('get_bookings_by_codes', { p_codes: codes }) : Promise.resolve([]));
   }
   const r = await Promise.all(jobs);
   const rooms = r[0] || [], opts = r[1] || [];
@@ -217,7 +227,7 @@ async function loadOnce() {
     const mine = (r[3] || []).map(mapMine), taken = new Set(mine.filter(b => b.status === 'active').map(b => b.roomId + '|' + b.date + '|' + b.s + '|' + b.e));
     const slots = (r[2] || []).filter(x => !taken.has(x.room_id + '|' + String(x.day).slice(0, 10) + '|' + x.start_min + '|' + x.end_min)).map(mapSlot);
     S.bookings = mine.concat(slots);
-    const cm = new Map(); mine.forEach(b => cm.set(bkey(b), { phone: b._phone, email: b._email })); S.contacts = cm;
+    const cm = new Map(); mine.forEach(b => cm.set(bkey(b), { phone: b._phone, email: b._email })); slots.forEach(b => cm.set(bkey(b), { phone: b._phone, email: '' })); S.contacts = cm;
     if (codes.length) { const found = new Set(mine.map(b => b.code)); saveCodes(codes.filter(c => found.has(c))); }   /* forget codes that no longer exist */
     S.users = []; S.mailCfg = null;
   }
@@ -274,7 +284,7 @@ function roomCard(r) {
   const st = roomStatus(r);
   let icon, line, sub = '';
   if (st.state === 'closed') { icon = 'wrench'; line = 'ปิดใช้งานชั่วคราว'; sub = r.description || 'ขณะนี้ยังไม่เปิดให้จอง'; }
-  else if (st.state === 'busy') { icon = 'clock'; line = 'ไม่ว่างถึง ' + minToStr(st.booking.e) + ' น.'; sub = st.booking.title + (st.booking.bookerName ? ' โดย ' + st.booking.bookerName : ''); }
+  else if (st.state === 'busy') { icon = 'clock'; line = 'ไม่ว่างถึง ' + minToStr(st.booking.e) + ' น.'; sub = st.booking.title + (st.booking.bookerName ? ' โดย ' + st.booking.bookerName + (st.booking.agency ? ' (' + st.booking.agency + ')' : '') : ''); }
   else {
     icon = 'check';
     if (st.off) { line = 'ว่าง'; sub = 'นอกเวลาจอง (' + minToStr(DAY_START) + ' ถึง ' + minToStr(DAY_END) + ' น.)'; }
@@ -292,7 +302,8 @@ function roomCard(r) {
     (r.status === 'closed' ? '' : slotStrip(r.id, todayStr())) +
     (eqChips ? '<div class="chips">' + eqChips + '</div>' : '') +
     '<div class="room-act"><button type="button" class="btn primary sm" data-act="book" data-room="' + esc(r.id) + '"' + (r.status === 'closed' ? ' disabled' : '') + '>' + ic('plus') + 'จองห้องนี้</button>' +
-    '<button type="button" class="btn sm" data-act="goto-schedule" data-room="' + esc(r.id) + '">' + ic('cal') + 'ดูตารางเวลา</button></div></div></article>';
+    '<button type="button" class="btn sm" data-act="goto-schedule" data-room="' + esc(r.id) + '">' + ic('cal') + 'ดูตารางเวลา</button></div>' +
+    (r.manager || r.managerPhone ? '<p class="room-mgr">' + ic('user') + '<span>ผู้ดูแลห้อง' + (r.manager ? ' ' + esc(r.manager) : '') + '</span>' + (r.managerPhone ? '<span class="room-tel">' + ic('phone') + telLink(r.managerPhone) + '</span>' : '') + '</p>' : '') + '</div></article>';
 }
 
 function viewOverview() {
@@ -395,16 +406,15 @@ function layoutLanes(evs) {
 }
 function evHtml(b, lane, lanes, gs, ge, showRoom) {
   const span = ge - gs, top = (b.s - gs) / span * 100, h = (b.e - b.s) / span * 100, w = 100 / lanes, left = lane * w;
-  const r = roomOf(b.roomId), mine = isMine(b);
-  const pos = 'top:calc(' + top + '% + 2px);height:calc(' + h + '% - 4px);left:calc(' + left + '% + 3px);width:calc(' + w + '% - 6px)';
-  if (b.slot) {   /* somebody else's hour: nothing to open, no personal data */
-    const tip = 'ไม่ว่าง ' + b.start + ' ถึง ' + b.end + (r ? ' ' + r.name : '');
-    return '<div class="ev slot ' + roomClass(b.roomId) + '" style="' + pos + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '"><b>ไม่ว่าง</b><span>' + b.start + '–' + b.end + '</span>' + (showRoom && r ? '<span>' + esc(r.name) + '</span>' : '') + '</div>';
-  }
-  const tip = b.title + ' ' + b.start + ' ถึง ' + b.end + (r ? ' ' + r.name : '');
-  return '<button type="button" class="ev ' + roomClass(b.roomId) + '" style="' + pos + '" data-act="detail" data-key="' + esc(bkey(b)) + '" title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
-    '<b>' + esc(b.title) + '</b><span>' + b.start + '–' + b.end + (mine ? '<i class="me">ของฉัน</i>' : '') + '</span>' +
-    (showRoom && r ? '<span>' + esc(r.name) + '</span>' : '') + '</button>';
+  const r = roomOf(b.roomId), mine = isMine(b), ct = S.contacts.get(bkey(b)), phone = ct && ct.phone ? ct.phone : '';
+  const long = (b.e - b.s) >= 120;   /* two hours or more: there is room for a separate time line */
+  const who = (b.bookerName || '') + (b.agency ? (b.bookerName ? ' · ' : '') + b.agency : '');
+  const meTag = mine ? '<i class="me">ของฉัน</i>' : '';
+  const tip = bookTip(b);
+  return '<button type="button" class="ev ' + roomClass(b.roomId) + '" style="top:calc(' + top + '% + 2px);height:calc(' + h + '% - 4px);left:calc(' + left + '% + 3px);width:calc(' + w + '% - 6px)" data-act="detail" data-key="' + esc(bkey(b)) + '" title="' + esc(tip) + '" aria-label="' + esc(tip.replace(/\n/g, ' · ')) + '">' +
+    '<b>' + esc(b.title) + '</b>' + (long ? '<span>' + b.start + '–' + b.end + meTag + '</span>' : '') +
+    (who ? '<span>' + (long ? '' : meTag) + esc(who) + '</span>' : (!long && meTag ? '<span>' + meTag + '</span>' : '')) +
+    (phone ? '<span>โทร ' + esc(phone) + '</span>' : '') + (showRoom && r ? '<span>' + esc(r.name) + '</span>' : '') + '</button>';
 }
 function roomHead(r, date) {
   let st = '';
@@ -443,7 +453,7 @@ function monthHtml() {
     const d = addDays(start, i), list = (by[d] || []).sort(byTime), show = list.slice(0, 3), more = list.length - show.length;
     h += '<div class="mcell' + (d.slice(0, 7) !== first.slice(0, 7) ? ' out' : '') + (d === today ? ' today' : '') + (d < today ? ' past' : '') + '">' +
       '<button type="button" class="mnum" data-act="goto-day" data-date="' + d + '" aria-label="' + esc(fmtLong(d)) + '">' + dayNum(d) + '</button>' +
-      show.map(b => b.slot ? '<span class="mchip slot ' + roomClass(b.roomId) + '" title="ไม่ว่าง ' + b.start + ' ถึง ' + b.end + '">' + b.start + ' ไม่ว่าง</span>' : '<button type="button" class="mchip ' + roomClass(b.roomId) + '" data-act="detail" data-key="' + esc(bkey(b)) + '" title="' + esc(b.title + ' ' + b.start + ' ถึง ' + b.end + ' ' + roomName(b.roomId)) + '">' + b.start + ' ' + esc(b.title) + '</button>').join('') +
+      show.map(b => '<button type="button" class="mchip ' + roomClass(b.roomId) + '" data-act="detail" data-key="' + esc(bkey(b)) + '" title="' + esc(bookTip(b)) + '">' + b.start + ' ' + esc(b.title) + '</button>').join('') +
       (more > 0 ? '<button type="button" class="mmore" data-act="goto-day" data-date="' + d + '">อีก ' + more + ' รายการ</button>' : '') + '</div>';
   }
   return h + '</div>';
@@ -571,6 +581,7 @@ function viewRooms() {
   h += S.rooms.length ? '<div class="list" style="margin-top:14px">' + S.rooms.map(r =>
     '<div class="tbl-room"><div class="thumb">' + photoInner(r, '') + '</div><div><h3>' + esc(r.name) + (r.status === 'closed' ? ' <span class="status-tag bad">ปิดใช้งาน</span>' : '') + '</h3>' +
     '<p class="muted small">' + (r.location ? esc(r.location) + ', ' : '') + (r.capacity || '-') + ' ที่นั่ง</p>' +
+    (r.manager || r.managerPhone ? '<p class="small" style="margin-top:4px">ผู้ดูแลห้อง: ' + esc(r.manager || '-') + (r.managerPhone ? ' · โทร ' + esc(r.managerPhone) : '') + '</p>' : '') +
     (r.description ? '<p class="small" style="margin-top:4px">' + esc(r.description) + '</p>' : '') + chipsOf(r.equipment) + '</div>' +
     '<div class="tbl-act"><button type="button" class="btn sm" data-act="room-edit" data-room="' + esc(r.id) + '">' + ic('edit') + 'แก้ไข</button>' +
     '<button type="button" class="btn sm danger" data-act="room-delete" data-room="' + esc(r.id) + '">' + ic('trash') + 'ลบ</button></div></div>').join('') + '</div>'
@@ -750,7 +761,7 @@ function openBooking(pre) {
     '<fieldset class="field"><legend>ความต้องการสำหรับผู้ดูแล <span class="hint">(เลือกได้หลายข้อ)</span></legend>' +
     (needs ? '<div class="ccs">' + needs + '</div>' : '') +
     '<textarea id="bk-note" maxlength="500" placeholder="หมายเหตุเพิ่มเติมถึงผู้ดูแล (ถ้ามี)" aria-label="หมายเหตุเพิ่มเติมถึงผู้ดูแล">' + esc(ed ? ed.note : '') + '</textarea></fieldset>' +
-    (ed ? '' : '<label class="consent"><input type="checkbox" id="bk-consent"><span>ข้าพเจ้ายอมรับให้เก็บและใช้ชื่อ เบอร์โทรศัพท์ อีเมล และหน่วยงาน เพื่อการจองห้องประชุมและการติดต่อกลับ ' + req + '</span></label>' + (S.isAdmin ? '' : '<label class="consent"><input type="checkbox" id="bk-remember" checked><span>จำข้อมูลผู้จองนี้ไว้ในเครื่องนี้ เพื่อกรอกให้อัตโนมัติครั้งต่อไป</span></label>')) +
+    (ed ? '' : '<label class="consent"><input type="checkbox" id="bk-consent"><span>ข้าพเจ้ายอมรับให้เก็บและใช้ข้อมูลนี้เพื่อการจองห้องประชุม และให้แสดงชื่อเรื่อง ชื่อผู้จอง หน่วยงาน และเบอร์โทรศัพท์บนปฏิทิน (อีเมลไม่แสดง) ' + req + '</span></label>' + (S.isAdmin ? '' : '<label class="consent"><input type="checkbox" id="bk-remember" checked><span>จำข้อมูลผู้จองนี้ไว้ในเครื่องนี้ เพื่อกรอกให้อัตโนมัติครั้งต่อไป</span></label>')) +
     '<div class="hp" aria-hidden="true"><label>เว็บไซต์<input type="text" id="bk-hp" tabindex="-1" autocomplete="off"></label></div>' +
     '</div><div class="dlg-foot"><div class="err" id="bk-err" role="alert"></div><div class="btns"><button type="button" class="btn" data-act="close">ปิด</button><button type="submit" class="btn primary" id="bk-submit">' + (ed ? 'บันทึกการแก้ไข' : 'ยืนยันการจอง') + '</button></div></div></form>');
   updateBkPreview();
@@ -810,7 +821,7 @@ function slotProblems(v, list) {
   }
   if (v.date) {
     const c = findConflict(v.roomId, v.date, v.s, v.e, BK.own ? BK.own.key : null, list);
-    if (c) p.push('ช่วงเวลานี้ไม่ว่าง ห้องถูกจอง ' + c.start + ' ถึง ' + c.end + ' น.' + (c.slot ? '' : ' (' + c.title + ')'));
+    if (c) p.push('ช่วงเวลานี้ไม่ว่าง ห้องถูกจอง ' + c.start + ' ถึง ' + c.end + ' น.' + ' (' + c.title + ')');
   }
   return p;
 }
@@ -928,10 +939,10 @@ function openDetail(key) {
     row('ผู้จอง', esc(b.bookerName || '-')) +
     (b.agency ? row('หน่วยงาน', esc(b.agency)) : '') +
     (b.contact ? row('ติดต่อ', esc(b.contact)) : '') +
-    (ct && ct.phone ? row('โทรศัพท์', esc(ct.phone)) : '') + (ct && ct.email ? row('อีเมล', esc(ct.email)) : '') +
+    (ct && ct.phone ? row('โทรศัพท์', telLink(ct.phone)) : '') + (ct && ct.email ? row('อีเมล', esc(ct.email)) : '') +
     (b.mode ? row('รูปแบบ', esc(MODES[b.mode])) : '') +
     (b.attendees > 0 ? row('ผู้เข้าร่วม', b.attendees + ' คน') : '') +
-    row('ความต้องการ', b.needs.length ? chipsOf(b.needs, 'need') : '<span class="muted">ไม่มี</span>') +
+    (b.slot ? '' : row('ความต้องการ', b.needs.length ? chipsOf(b.needs, 'need') : '<span class="muted">ไม่มี</span>')) +
     (b.note ? row('หมายเหตุ', esc(b.note)) : '') +
     row('สถานะ', b.status === 'cancelled' ? '<span class="status-tag bad">' + esc(cancelTag(b)) + '</span>' : (isPast(b) ? '<span class="status-tag">เสร็จสิ้นแล้ว</span>' : (b.prepared ? '<span class="status-tag ok">' + ic('check') + 'ผู้ดูแลเตรียมแล้ว</span>' : '<span class="status-tag">จองแล้ว</span>'))) +
     (b.mine && b.code ? row('รหัสการจอง', '<code class="code">' + esc(prettyCode(b.code)) + '</code>') : '') +
@@ -970,6 +981,8 @@ function openRoomEdit(id) {
     '<div class="row-eq"><div class="field"><label for="rm-cap">จำนวนที่นั่งที่รองรับ</label><input type="number" id="rm-cap" inputmode="numeric" min="1" max="999" value="' + (r && r.capacity ? r.capacity : '') + '"></div>' +
     '<div class="field"><label for="rm-status">สถานะการให้จอง</label><select id="rm-status"><option value="open"' + (!r || r.status === 'open' ? ' selected' : '') + '>เปิดให้จอง</option><option value="closed"' + (r && r.status === 'closed' ? ' selected' : '') + '>ปิดใช้งานชั่วคราว</option></select></div></div>' +
     '<div class="field"><label for="rm-loc">ที่ตั้ง <span class="hint">(อาคาร ชั้น)</span></label><input type="text" id="rm-loc" maxlength="120" value="' + esc(r ? r.location : '') + '" placeholder="เช่น อาคาร A ชั้น 3"></div>' +
+    '<div class="row-eq"><div class="field"><label for="rm-mgr">ผู้ดูแลห้อง <span class="hint">(ชื่อ)</span></label><input type="text" id="rm-mgr" maxlength="80" value="' + esc(r ? r.manager : '') + '" placeholder="เช่น คุณสมศรี ใจดี"></div>' +
+    '<div class="field"><label for="rm-mgrtel">เบอร์ติดต่อผู้ดูแลห้อง</label><input type="tel" id="rm-mgrtel" maxlength="40" inputmode="tel" value="' + esc(r ? r.managerPhone : '') + '" placeholder="เช่น 042-711282 ต่อ 105"></div></div>' +
     '<fieldset class="field"><legend>อุปกรณ์อำนวยความสะดวกในห้อง</legend><div class="ccs" id="rm-eqs">' + eqH + '</div>' +
     '<div class="cfg-add"><input type="text" id="rm-eq-new" maxlength="60" placeholder="เพิ่มอุปกรณ์อื่น" aria-label="เพิ่มอุปกรณ์อื่น"><button type="button" class="btn" data-act="rm-eq-add">' + ic('plus') + 'เพิ่ม</button></div></fieldset>' +
     '<div class="field"><label for="rm-desc">รายละเอียดเพิ่มเติม</label><textarea id="rm-desc" maxlength="500" placeholder="เช่น รูปแบบการจัดโต๊ะ ข้อควรทราบ หรือเหตุผลที่ปิดใช้งาน">' + esc(r ? r.description : '') + '</textarea></div>' +
@@ -1027,7 +1040,7 @@ async function submitRoom() {
   if (!(cap >= 1 && cap <= 999)) problems.push('จำนวนที่นั่งต้องเป็นตัวเลข 1 ถึง 999');
   if (problems.length) { err.innerHTML = '<ul>' + problems.map(m => '<li>' + esc(m) + '</li>').join('') + '</ul>'; return; }
   const rec = {
-    name, capacity: cap, status: $('#rm-status').value, location: $('#rm-loc').value.trim(), description: $('#rm-desc').value.trim(),
+    name, capacity: cap, status: $('#rm-status').value, location: $('#rm-loc').value.trim(), description: $('#rm-desc').value.trim(), manager_name: $('#rm-mgr').value.trim(), manager_phone: $('#rm-mgrtel').value.trim(),
     equipment: $$('input[name="eq"]:checked', form).map(i => i.value),
     sort_order: old ? old.order : (S.rooms.reduce((m, r) => Math.max(m, r.order), 0) + 1), photo_path: old && old.photo ? old.photo : null
   };
