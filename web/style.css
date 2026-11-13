@@ -427,3 +427,36 @@ code.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;backg
 .room-mgr a{color:var(--accent-ink);font-weight:500;text-decoration:underline;text-underline-offset:3px}
 .ev .me{margin-right:4px;margin-left:0}
 .kv a{color:var(--accent-ink);text-decoration:underline;text-underline-offset:3px}
+
+/* ===== today's bookings with requester details on the room status cards ===== */
+.day-list{margin-top:14px}
+.dl-h{font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+.day-list ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.day-list li{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:8px 12px;border-radius:12px;background:var(--surface-2);font-size:13px;line-height:1.5}
+.day-list li.now{box-shadow:inset 3px 0 0 var(--accent-ink)}
+.dl-time{font-weight:600;white-space:nowrap;color:var(--ink)}
+.dl-main b{font-weight:600;display:block;overflow-wrap:anywhere}
+.dl-who{display:flex;flex-wrap:wrap;gap:2px 14px;color:var(--ink-2);font-size:12.5px}
+.dl-who .rq{display:inline-flex;align-items:center;gap:5px;overflow-wrap:anywhere}
+.dl-who .ic{width:13px;height:13px;flex:none}
+.dl-who a{color:var(--accent-ink);font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.dl-more{margin-top:6px;font-size:12.5px;color:var(--ink-2)}
+
+/* ===== booking list under the calendar ===== */
+.agenda{border-top:1px solid var(--line-soft);padding:18px 16px 20px}
+.ag-head{display:flex;gap:6px 16px;flex-wrap:wrap;align-items:baseline;justify-content:space-between}
+.ag-head h2{font-size:17px;font-weight:600}
+.ag-hint{font-size:13px;color:var(--ink-2);margin:4px 0 4px}
+.ag-empty{margin-top:12px;color:var(--ink-2);font-size:14px}
+.ag-day{margin-top:16px}
+.ag-day h3{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ag-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.ag-row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 16px;align-items:start;padding:10px 14px;border-radius:14px;background:var(--rc-bg);border-left:4px solid var(--rc-bd)}
+.ag-time{display:block;font-weight:600;font-size:13.5px;white-space:nowrap}
+.ag-room{display:block;font-size:12.5px;color:var(--ink-2);font-weight:500;overflow-wrap:anywhere}
+.ag-main{min-width:0}
+.ag-title{appearance:none;background:none;border:0;padding:0;font:inherit;font-weight:600;font-size:14.5px;color:var(--ink);text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;overflow-wrap:anywhere}
+.ag-title:hover{text-decoration-color:currentColor}
+.ag-main .me{font-style:normal;font-weight:600;font-size:10.5px;background:var(--surface);border-radius:999px;padding:0 7px;margin-left:8px}
+.ag-row .dl-who{margin-top:3px}
+@media (max-width:560px){.ag-row{grid-template-columns:minmax(0,1fr)}}

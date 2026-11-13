@@ -262,11 +262,23 @@ function slotStrip(roomId, date) {
     const cls = b ? (isMine(b) ? 'mine' : 'busy') : 'free';
     const past = date < today || (date === today && m + STEP <= m0);
     const cur = date === today && m <= m0 && m0 < m + STEP;
-    cells += '<i class="sc ' + cls + (past ? ' past' : '') + (cur ? ' cur' : '') + '" title="' + minToStr(m) + ' ถึง ' + minToStr(m + STEP) + (b ? ' ถูกจอง' : ' ว่าง') + '"></i>';
+    cells += '<i class="sc ' + cls + (past ? ' past' : '') + (cur ? ' cur' : '') + '" title="' + esc(minToStr(m) + ' ถึง ' + minToStr(m + STEP) + (b ? ' ถูกจอง · ' + b.title + (b.bookerName ? ' · ' + b.bookerName + (b.agency ? ' (' + b.agency + ')' : '') : '') : ' ว่าง')) + '"></i>';
     ticks += '<span>' + pad(m / 60) + '</span>';
   }
   const label = list.length ? 'ช่วงที่ถูกจองวันนี้ ' + list.map(b => b.start + ' ถึง ' + b.end).join(', ') : 'วันนี้ยังไม่มีการจอง';
   return '<div class="sstrip" style="--n:' + NSLOT + '"><div class="sgrid" role="img" aria-label="' + esc(label) + '">' + cells + '</div><div class="sticks" aria-hidden="true">' + ticks + '</div><p class="scap">ช่องละ 1 ชั่วโมง ตั้งแต่ ' + pad(DAY_START / 60) + ' ถึง ' + pad(DAY_END / 60) + ' น.</p></div>';
+}
+function requesterBits(b) {
+  const ct = S.contacts.get(bkey(b)), phone = ct && ct.phone ? ct.phone : '';
+  const who = [b.bookerName, b.agency ? '(' + b.agency + ')' : ''].filter(Boolean).join(' ');
+  return (who ? '<span class="rq">' + ic('user') + esc(who) + '</span>' : '') + (phone ? '<span class="rq">' + ic('phone') + telLink(phone) + '</span>' : '');
+}
+function dayList(r) {
+  const list = activeList(r.id, todayStr()), m = nowMin();
+  if (!list.length) return '';
+  const show = list.slice(0, 5), more = list.length - show.length;
+  return '<div class="day-list"><p class="dl-h">การจองวันนี้</p><ul>' + show.map(b => '<li' + (b.s <= m && m < b.e ? ' class="now"' : '') + '><span class="dl-time">' + b.start + '–' + b.end + '</span><div class="dl-main"><b>' + esc(b.title) + '</b><div class="dl-who">' + requesterBits(b) + '</div></div></li>').join('') + '</ul>' +
+    (more > 0 ? '<p class="dl-more">และอีก ' + more + ' รายการ <button type="button" class="linkbtn" data-act="goto-schedule" data-room="' + esc(r.id) + '">ดูทั้งหมด</button></p>' : '') + '</div>';
 }
 const chipsOf = (arr, cls) => arr.length ? '<div class="chips">' + arr.map(x => '<span class="chip' + (cls ? ' ' + cls : '') + '">' + esc(x) + '</span>').join('') + '</div>' : '';
 
@@ -299,7 +311,7 @@ function roomCard(r) {
     '<p class="cap-line">' + ic('users') + 'รองรับ ' + (r.capacity || '-') + ' ที่นั่ง</p>' +
     '<p class="state">' + ic(icon) + '<span>' + esc(line) + '</span></p>' +
     '<p class="sub">' + esc(sub) + '</p>' +
-    (r.status === 'closed' ? '' : slotStrip(r.id, todayStr())) +
+    (r.status === 'closed' ? '' : slotStrip(r.id, todayStr()) + dayList(r)) +
     (eqChips ? '<div class="chips">' + eqChips + '</div>' : '') +
     '<div class="room-act"><button type="button" class="btn primary sm" data-act="book" data-room="' + esc(r.id) + '"' + (r.status === 'closed' ? ' disabled' : '') + '>' + ic('plus') + 'จองห้องนี้</button>' +
     '<button type="button" class="btn sm" data-act="goto-schedule" data-room="' + esc(r.id) + '">' + ic('cal') + 'ดูตารางเวลา</button></div>' +
@@ -485,6 +497,29 @@ function sideHtml() {
     '<section class="mini" aria-label="ปฏิทินย่อ">' + miniHtml() + '</section>' +
     '<section class="rlist"><h2>ห้องประชุม (สถานะตอนนี้)</h2><div class="ritems">' + items + '</div></section></aside>';
 }
+/* booking list under the calendar grid: everything visible at a glance, with who to call (useful when two teams want to swap rooms) */
+function agendaHtml() {
+  const c = S.cal; let from = c.date, to = c.date, title = 'รายการจองวันที่เลือก', cap = 0;
+  if (c.view === 'week') { from = startOfWeek(c.date); to = addDays(from, 6); title = 'รายการจองของสัปดาห์นี้'; }
+  else if (c.view === 'month') { from = monthStart(c.date); to = addDays(addMonths(c.date, 1), -1); title = 'รายการจองของเดือนนี้'; cap = 60; }
+  const order = new Map(S.rooms.map((r, i) => [r.id, i]));
+  let list = calEvents(from, to).slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) || a.s - b.s || (order.get(a.roomId) || 0) - (order.get(b.roomId) || 0));
+  const total = list.length;
+  if (cap && list.length > cap) list = list.slice(0, cap);
+  const byDay = new Map();
+  list.forEach(b => { if (!byDay.has(b.date)) byDay.set(b.date, []); byDay.get(b.date).push(b); });
+  let body = '';
+  byDay.forEach((arr, date) => {
+    body += '<div class="ag-day"><h3>' + esc(fmtLong(date)) + (date === todayStr() ? ' <span class="status-tag live">วันนี้</span>' : '') + '</h3><ul class="ag-list">' + arr.map(b =>
+      '<li class="ag-row ' + roomClass(b.roomId) + '"><div><span class="ag-time">' + b.start + '–' + b.end + '</span><span class="ag-room">' + esc(roomName(b.roomId)) + '</span></div>' +
+      '<div class="ag-main"><button type="button" class="ag-title" data-act="detail" data-key="' + esc(bkey(b)) + '">' + esc(b.title) + '</button>' + (isMine(b) ? '<i class="me">ของฉัน</i>' : '') +
+      '<div class="dl-who">' + requesterBits(b) + '</div></div></li>').join('') + '</ul></div>';
+  });
+  return '<div class="agenda"><div class="ag-head"><h2>' + title + '</h2><span class="muted small">' + total + ' รายการ</span></div>' +
+    '<p class="ag-hint">อยากแลกห้องกัน? ติดต่อผู้จองตามเบอร์โทรเพื่อตกลงกัน แล้วแจ้งผู้ดูแล หรือแก้ไขการจองของตัวเองตามที่ตกลง</p>' +
+    (body || '<p class="ag-empty">ไม่มีการจองในช่วงนี้</p>') +
+    (cap && total > cap ? '<p class="ag-hint">แสดง ' + cap + ' รายการแรก ใช้มุมมองสัปดาห์หรือวันเพื่อดูที่เหลือ</p>' : '') + '</div>';
+}
 function viewCalendar() {
   const c = S.cal;
   if (c.room !== 'all' && !roomOf(c.room)) c.room = 'all';
@@ -508,7 +543,7 @@ function viewCalendar() {
     '<input type="date" class="cal-date" id="cal-date" value="' + esc(c.date) + '" aria-label="ไปยังวันที่" data-fk="cal-date"><div class="seg" role="group" aria-label="มุมมองปฏิทิน">' + seg + '</div></div>';
   const note = '<div class="cal-note"><span>แตะช่องว่างเพื่อจอง ช่องละ 1 ชั่วโมง จองได้ ' + minToStr(DAY_START) + ' ถึง ' + minToStr(DAY_END) + ' น.</span>' +
     (c.view === 'day' && c.room === 'all' ? '<span>แยกคอลัมน์ตามห้อง</span>' : (c.room === 'all' ? '<span>สีของแต่ละห้องตรงกับรายการด้านซ้าย</span>' : '')) + '</div>';
-  return '<div class="calpage">' + sideHtml() + '<section class="cal" aria-label="ปฏิทินการจองห้องประชุม">' + bar + body + note + '</section></div>';
+  return '<div class="calpage">' + sideHtml() + '<section class="cal" aria-label="ปฏิทินการจองห้องประชุม">' + bar + body + note + agendaHtml() + '</section></div>';
 }
 
 function cancelTag(b) {
@@ -617,7 +652,7 @@ function renderTop() {
   if (!live) { bell.hidden = true; return; }
   let cls = 'pill', txt;
   if (S.timedOut) { cls += ' warn'; txt = 'เชื่อมต่อไม่ได้'; }
-  else if (S.fresh && S.rt) { cls += ' live'; txt = 'ซิงค์สด'; }
+  else if (S.fresh && S.rt) { cls += ' live'; txt = 'realtime'; }
   else if (S.fresh) txt = 'รีเฟรชอัตโนมัติ';
   else txt = 'กำลังเชื่อมต่อ';
   c.className = cls; c.innerHTML = '<i class="dot"></i><span>' + txt + '</span>';
