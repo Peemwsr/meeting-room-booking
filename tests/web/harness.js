@@ -1,0 +1,26 @@
+process.env.TZ = 'Asia/Bangkok';
+const { JSDOM } = require('jsdom'); const fs = require('fs'); const makeFake = require('./fake_supabase');
+const WEB = require('path').join(__dirname, '..', '..', 'web') + '/';
+module.exports = async function boot(configure, opts = {}) {
+  const fake = makeFake(opts.fake); const errors = [];
+  if (configure) configure(fake.world);
+  const html = fs.readFileSync(WEB + 'index.html', 'utf8').replace(/<script src="https:\/\/cdn[^>]*><\/script>/, '').replace('<script src="config.js"></script>', '').replace('<script src="app.js"></script>', '');
+  const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'https://rooms.test/' + (opts.hash || '') });
+  const w = dom.window;
+  w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  w.HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); this.dispatchEvent(new w.Event('close')); };
+  w.scrollTo = () => {}; w.addEventListener('error', e => errors.push('ERR ' + e.message));
+  w.createImageBitmap = async () => ({ width: 1200, height: 800, close() {} });
+  w.HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
+  w.HTMLCanvasElement.prototype.toBlob = function (cb) { cb(new w.Blob(['jpegbytes'], { type: 'image/jpeg' })); };
+  w.crypto = { randomUUID: () => 'photo-' + Math.random().toString(36).slice(2) };
+  w.supabase = fake; w.APP_CONFIG = Object.assign({ SUPABASE_URL: 'https://abc.supabase.co', SUPABASE_ANON_KEY: 'anon', DAY_START_HOUR: 8, DAY_END_HOUR: 16 }, opts.config || {});
+  if (opts.preload) opts.preload(w);
+  w.eval(fs.readFileSync(WEB + 'app.js', 'utf8'));
+  const d = w.document, sleep = ms => new Promise(r => setTimeout(r, ms));
+  const set = (id, v, ev = 'input') => { const el = d.getElementById(id); el.value = v; el.dispatchEvent(new w.Event(ev, { bubbles: true })); };
+  const submit = id => d.getElementById(id).dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  const click = sel => { const el = typeof sel === 'string' ? d.querySelector(sel) : sel; if (!el) throw new Error('no element: ' + sel); el.click(); };
+  const tomorrow = () => { const t = new Date(Date.now() + 7 * 3600e3 + 864e5); return t.toISOString().slice(0, 10); };
+  return { w, d, fake, world: fake.world, errors, sleep, set, submit, click, tomorrow, text: sel => (d.querySelector(sel) || {}).textContent };
+};
