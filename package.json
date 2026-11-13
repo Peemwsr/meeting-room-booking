@@ -1,9 +1,0 @@
-{
-  "name": "room-booking-sakonnakhon",
-  "version": "2.0.0",
-  "private": true,
-  "description": "ระบบจองห้องประชุมจังหวัดสกลนคร (หน้าเว็บ + Supabase + ตัวส่งอีเมล)",
-  "scripts": { "start": "node server.js", "mailer": "node mailer.js" },
-  "dependencies": { "nodemailer": "^10.5.0" },
-  "engines": { "node": ">=18" }
-}
