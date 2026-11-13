@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>ระบบจองห้องประชุมจังหวัดสกลนคร</title>
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <div class="flagbar" aria-hidden="true"></div>
+  <div class="strip">
+    <div class="wrap strip-in">
+      <span class="clock" id="clock"></span>
+      <span class="strip-r">
+        <button type="button" class="bell" id="bell" data-act="notices" hidden>
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <span class="bell-n" id="bell-n" hidden></span>
+        </button>
+        <span class="pill" id="conn" hidden><i class="dot"></i><span>กำลังเชื่อมต่อ</span></span>
+        <span class="pill" id="role" hidden></span>
+        <button type="button" class="pill userbtn" id="admin-link" data-act="admin-login" hidden>สำหรับผู้ดูแล</button>
+        <button type="button" class="pill userbtn" id="user-btn" data-act="profile" hidden></button>
+      </span>
+    </div>
+  </div>
+  <header class="brand">
+    <img class="brand-logo" src="assets/logo.png" width="84" height="84" alt="ตราจังหวัดสกลนคร">
+    <span class="brand-name">ระบบจองห้องประชุมจังหวัดสกลนคร</span>
+  </header>
+  <div class="navbar" id="navbar" hidden>
+    <div class="wrap nav-in">
+      <span></span>
+      <nav class="tabs" id="tabs" aria-label="เมนูหลัก"></nav>
+      <div class="nav-cta"><button type="button" class="btn primary sm" data-act="book-new" id="cta-top" hidden></button></div>
+    </div>
+  </div>
+  <div class="main-wrap"><div class="wrap"><main id="main" tabindex="-1" aria-live="off"></main></div></div>
+  <footer class="foot"><div class="flagbar" aria-hidden="true"></div><div class="wrap foot-in"><img class="foot-logo" src="assets/logo.png" alt="" width="44" height="44"><b>ระบบจองห้องประชุมจังหวัดสกลนคร</b><span>จองได้ครั้งละ 1 ชั่วโมง ข้อมูลอัปเดตแบบเรียลไทม์</span></div></footer>
+</div>
+<button type="button" class="btn primary fab" data-act="book-new" id="cta-fab" hidden></button>
+<dialog id="dlg" aria-labelledby="dlg-title"></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ตัวเชื่อม Supabase (ถ้าใช้งานจริง แนะนำล็อกเวอร์ชันให้ตายตัว เช่น @supabase/supabase-js@2.xx.x หลังทดสอบแล้ว) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
